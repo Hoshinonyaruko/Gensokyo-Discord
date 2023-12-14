@@ -1,0 +1,250 @@
+// 处理收到的信息事件
+package Processor
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/hoshinonyaruko/gensokyo-discord/config"
+	"github.com/hoshinonyaruko/gensokyo-discord/echo"
+	"github.com/hoshinonyaruko/gensokyo-discord/handlers"
+	"github.com/hoshinonyaruko/gensokyo-discord/idmap"
+	"github.com/hoshinonyaruko/gensokyo-discord/mylog"
+)
+
+// ProcessGuildNormalMessage 处理频道常规消息
+func (p *Processors) ProcessGuildNormalMessage(data *discordgo.MessageCreate, se *discordgo.Session) error {
+	if !p.Settings.GlobalChannelToGroup {
+		// 将时间字符串转换为时间戳
+		t := data.Timestamp
+		//获取s
+		s := discordgo.GetGlobalS()
+		//转换at
+		messageText := handlers.RevertTransformedText(data, "guild", se, 10000) //这里未转换
+		if messageText == "" {
+			mylog.Printf("信息被自定义黑白名单拦截")
+			return nil
+		}
+		//框架内指令
+		p.HandleFrameworkCommand(messageText, data, "guild", se)
+		//转换appid
+		AppIDString := strconv.FormatUint(p.Settings.AppID, 10)
+		//构造echo
+		echostr := AppIDString + "_" + strconv.FormatInt(s, 10)
+		//映射str的userid到int
+		userid64, err := idmap.StoreIDv2(data.Author.ID)
+		if err != nil {
+			mylog.Printf("Error storing ID: %v", err)
+			return nil
+		}
+		// 如果在Array模式下, 则处理Message为Segment格式
+		var segmentedMessages interface{} = messageText
+		if config.GetArrayValue() {
+			segmentedMessages = handlers.ConvertToSegmentedMessage(data)
+		}
+		// 处理onebot_channel_message逻辑
+		onebotMsg := OnebotChannelMessage{
+			ChannelID:   data.ChannelID,
+			GuildID:     data.GuildID,
+			Message:     segmentedMessages,
+			RawMessage:  messageText,
+			MessageID:   data.ID,
+			MessageType: "guild",
+			PostType:    "message",
+			SelfID:      int64(p.Settings.AppID),
+			UserID:      userid64,
+			SelfTinyID:  "0",
+			Sender: Sender{
+				Nickname: data.Member.Nick,
+				TinyID:   "0",
+				UserID:   userid64,
+				Card:     data.Member.Nick,
+				Sex:      "0",
+				Age:      0,
+				Area:     "0",
+				Level:    "0",
+			},
+			SubType: "channel",
+			Time:    t.Unix(),
+			Avatar:  data.Author.Avatar,
+		}
+		// 根据条件判断是否添加Echo字段
+		if config.GetTwoWayEcho() {
+			onebotMsg.Echo = echostr
+		}
+		// 获取MasterID数组
+		masterIDs := config.GetMasterID()
+
+		// 判断userid64是否在masterIDs数组里
+		isMaster := false
+		for _, id := range masterIDs {
+			if strconv.FormatInt(userid64, 10) == id {
+				isMaster = true
+				break
+			}
+		}
+
+		// 根据isMaster的值为groupMsg的Sender赋值role字段
+		if isMaster {
+			onebotMsg.Sender.Role = "owner"
+		} else {
+			onebotMsg.Sender.Role = "member"
+		}
+		//将当前s和appid和message进行映射
+		echo.AddMsgID(AppIDString, s, data.ID)
+		echo.AddMsgType(AppIDString, s, "guild")
+		//为不支持双向echo的ob11服务端映射
+		echo.AddMsgID(AppIDString, userid64, data.ID)
+		//映射类型
+		echo.AddMsgType(AppIDString, userid64, "guild")
+		//储存当前群或频道号的类型
+		idmap.WriteConfigv2(data.ChannelID, "type", "guild")
+		//todo 完善频道ob信息
+		//懒message_id池
+		echo.AddLazyMessageId(data.ChannelID, data.ID, time.Now())
+
+		//调试
+		PrintStructWithFieldNames(onebotMsg)
+
+		// 将 onebotMsg 结构体转换为 map[string]interface{}
+		msgMap := structToMap(onebotMsg)
+
+		//上报信息到onebotv11应用端(正反ws)
+		p.BroadcastMessageToAll(msgMap)
+	} else {
+		// GlobalChannelToGroup为true时的处理逻辑
+		//将频道转化为一个群
+		//获取s
+		s := discordgo.GetGlobalS()
+		var userid64 int64
+		var ChannelID64 int64
+		var err error
+		if config.GetIdmapPro() {
+			//将真实id转为int userid64
+			ChannelID64, userid64, err = idmap.StoreIDv2Pro(data.ChannelID, data.Author.ID)
+			if err != nil {
+				mylog.Fatalf("Error storing ID: %v", err)
+			}
+			//当参数不全时
+			_, _ = idmap.StoreIDv2(data.ChannelID)
+			_, _ = idmap.StoreIDv2(data.Author.ID)
+			if !config.GetHashIDValue() {
+				mylog.Fatalf("避坑日志:你开启了高级id转换,请设置hash_id为true,并且删除idmaps并重启")
+			}
+		} else {
+			//将channelid写入ini,可取出guild_id
+			ChannelID64, err = idmap.StoreIDv2(data.ChannelID)
+			if err != nil {
+				mylog.Printf("Error storing ID: %v", err)
+				return nil
+			}
+			//映射str的userid到int
+			userid64, err = idmap.StoreIDv2(data.Author.ID)
+			if err != nil {
+				mylog.Printf("Error storing ID: %v", err)
+				return nil
+			}
+		}
+
+		//转成int再互转
+		idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "guild_id", data.GuildID)
+		//转换at
+		messageText := handlers.RevertTransformedText(data, "guild", se, ChannelID64)
+		if messageText == "" {
+			mylog.Printf("信息被自定义黑白名单拦截")
+			return nil
+		}
+		//框架内指令
+		p.HandleFrameworkCommand(messageText, data, "guild", se)
+		//转换appid
+		AppIDString := strconv.FormatUint(p.Settings.AppID, 10)
+		//构造echo
+		echostr := AppIDString + "_" + strconv.FormatInt(s, 10)
+		//映射str的messageID到int
+		messageID64, err := idmap.StoreIDv2(data.ID)
+		if err != nil {
+			mylog.Printf("Error storing ID: %v", err)
+			return nil
+		}
+		messageID := int(messageID64)
+		// 如果在Array模式下, 则处理Message为Segment格式
+		var segmentedMessages interface{} = messageText
+		if config.GetArrayValue() {
+			segmentedMessages = handlers.ConvertToSegmentedMessage(data)
+		}
+		IsBindedUserId := idmap.CheckValue(data.Author.ID, userid64)
+		IsBindedGroupId := idmap.CheckValue(data.ChannelID, ChannelID64)
+		groupMsg := OnebotGroupMessage{
+			RawMessage:  messageText,
+			Message:     segmentedMessages,
+			MessageID:   messageID,
+			GroupID:     ChannelID64,
+			MessageType: "group",
+			PostType:    "message",
+			SelfID:      int64(p.Settings.AppID),
+			UserID:      userid64,
+			Sender: Sender{
+				Nickname: data.Member.Nick,
+				UserID:   userid64,
+				Card:     data.Member.Nick,
+				Sex:      "0",
+				Age:      0,
+				Area:     "",
+				Level:    "0",
+			},
+			SubType:         "normal",
+			Time:            time.Now().Unix(),
+			Avatar:          data.Author.Avatar,
+			RealMessageType: "guild",
+			IsBindedUserId:  IsBindedUserId,
+			IsBindedGroupId: IsBindedGroupId,
+		}
+		// 根据条件判断是否添加Echo字段
+		if config.GetTwoWayEcho() {
+			groupMsg.Echo = echostr
+		}
+		// 获取MasterID数组
+		masterIDs := config.GetMasterID()
+
+		// 判断userid64是否在masterIDs数组里
+		isMaster := false
+		for _, id := range masterIDs {
+			if strconv.FormatInt(userid64, 10) == id {
+				isMaster = true
+				break
+			}
+		}
+
+		// 根据isMaster的值为groupMsg的Sender赋值role字段
+		if isMaster {
+			groupMsg.Sender.Role = "owner"
+		} else {
+			groupMsg.Sender.Role = "member"
+		}
+		//将当前s和appid和message进行映射
+		echo.AddMsgID(AppIDString, s, data.ID)
+		echo.AddMsgType(AppIDString, s, "guild")
+		//为不支持双向echo的ob服务端映射
+		echo.AddMsgID(AppIDString, ChannelID64, data.ID)
+		//将当前的userid和groupid和msgid进行一个更稳妥的映射
+		echo.AddMsgIDv2(AppIDString, ChannelID64, userid64, data.ID)
+		//储存当前群或频道号的类型
+		idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "type", "guild")
+		echo.AddMsgType(AppIDString, ChannelID64, "guild")
+		//懒message_id池
+		echo.AddLazyMessageId(strconv.FormatInt(ChannelID64, 10), data.ID, time.Now())
+
+		//调试
+		PrintStructWithFieldNames(groupMsg)
+
+		// Convert OnebotGroupMessage to map and send
+		groupMsgMap := structToMap(groupMsg)
+
+		//上报信息到onebotv11应用端(正反ws)
+		p.BroadcastMessageToAll(groupMsgMap)
+	}
+
+	return nil
+}
