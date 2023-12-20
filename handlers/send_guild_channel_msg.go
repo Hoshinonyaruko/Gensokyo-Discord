@@ -3,7 +3,9 @@ package handlers
 import (
 	"bytes"
 	"encoding/base64"
+	"io"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/bwmarrin/discordgo"
@@ -142,11 +144,52 @@ func GenerateReplyMessage(messageID string, foundItems map[string][]string, mess
 	// 处理网络图片
 	if imageURLs, ok := foundItems["url_image"]; ok {
 		for _, imageURL := range imageURLs {
-			msg.Embeds = append(msg.Embeds, &discordgo.MessageEmbed{
-				Image: &discordgo.MessageEmbedImage{
-					URL: imageURL,
-				},
-			})
+			if config.GetUrlPicTransfer() {
+				// 如果配置为true，下载并转换为Base64
+				base64Data, err := downloadImage("http://" + imageURL)
+				if err != nil {
+					// 处理错误
+					continue
+				}
+
+				msg.Files = append(msg.Files, &discordgo.File{
+					Name:   "image.png",
+					Reader: bytes.NewReader(base64Data),
+				})
+			} else {
+				// 否则直接使用URL
+				msg.Embeds = append(msg.Embeds, &discordgo.MessageEmbed{
+					Image: &discordgo.MessageEmbedImage{
+						URL: "http://" + imageURL,
+					},
+				})
+			}
+		}
+	}
+
+	// 处理网络图片
+	if imageURLs, ok := foundItems["url_images"]; ok {
+		for _, imageURL := range imageURLs {
+			if config.GetUrlPicTransfer() {
+				// 如果配置为true，下载并转换为Base64
+				base64Data, err := downloadImage("https://" + imageURL)
+				if err != nil {
+					// 处理错误
+					continue
+				}
+
+				msg.Files = append(msg.Files, &discordgo.File{
+					Name:   "image.png",
+					Reader: bytes.NewReader(base64Data),
+				})
+			} else {
+				// 否则直接使用URL
+				msg.Embeds = append(msg.Embeds, &discordgo.MessageEmbed{
+					Image: &discordgo.MessageEmbedImage{
+						URL: "https://" + imageURL,
+					},
+				})
+			}
 		}
 	}
 
@@ -167,4 +210,20 @@ func GenerateReplyMessage(messageID string, foundItems map[string][]string, mess
 	}
 
 	return msg, nil
+}
+
+// 下载图片
+func downloadImage(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(data), nil
 }
