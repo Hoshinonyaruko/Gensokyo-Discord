@@ -104,7 +104,7 @@ settings:
   sandbox_mode : false              #默认false 如果你只希望沙箱频道使用,请改为true
   dev_message_id : false            #在沙盒和测试环境使用无限制msg_id 仅沙盒有效,正式环境请关闭,内测结束后,tx侧未来会移除
   send_error : true                 #将报错用文本发出,避免机器人被审核报无响应
-  url_pic_transfer : false          #把图片url(任意来源图链)变成你备案的白名单url 需要较高上下行+ssl+自备案域名+设置白名单域名(暂时不需要)
+  url_pic_transfer : false          #将url转为base64,走代理上传到dc,在国内环境,比url更快发图
   idmap_pro : false                 #需开启hash_id配合,高级id转换增强,可以多个真实值bind到同一个虚拟值,对于每个用户,每个群\私聊\判断私聊\频道,都会产生新的虚拟值,但可以多次bind,bind到同一个数字.数据库负担会变大.
   send_delay : 300                  #单位 毫秒 默认300ms 可以视情况减少到100或者50
 

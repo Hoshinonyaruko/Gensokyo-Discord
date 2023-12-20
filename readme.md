@@ -79,6 +79,7 @@ gensokyo-discord兼容 [OneBot-v11](https://github.com/botuniverse/onebot-11) �
 > 拓展 API 可前往 [文档](docs/cqhttp.md) 查看
 
 - [x] 方便设置且稳定可自定义proxy_adress连接
+- [x] url图片开启url_pic_transfer可秒发成功
 - [x] 连接多个ws地址
 - [x] 将频道虚拟成群事件
 - [x] 将私信虚拟成频道或群事件
