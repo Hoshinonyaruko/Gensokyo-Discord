@@ -29,20 +29,17 @@ func HandleSendGuildChannelMsg(client callapi.Client, s *discordgo.Session, mess
 		// 当 message.Echo 是字符串类型时执行此块
 		msgType = echo.GetMsgTypeByKey(echoStr)
 	}
-	//如果获取不到 就用group_id获取信息类型
 	if msgType == "" {
 		msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
 	}
-	//如果获取不到 就用user_id获取信息类型
 	if msgType == "" {
 		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
 	}
-	//新增 内存获取不到从数据库获取
-	if msgType == "" {
-		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
-	}
 	if msgType == "" {
 		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
+	}
+	if msgType == "" {
+		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
 	}
 	//当不转换频道信息时(不支持频道私聊)
 	if msgType == "" {
@@ -85,7 +82,7 @@ func HandleSendGuildChannelMsg(client callapi.Client, s *discordgo.Session, mess
 		echo.AddMappingSeq(messageID, msgseq+1)
 
 		// 使用GenerateReplyMessage函数处理所有类型的消息
-		replyMsg, err := GenerateReplyMessage(messageID, foundItems, messageText)
+		replyMsg, err := GenerateReplyMessage(foundItems, messageText)
 		if err != nil {
 			mylog.Printf("生成消息失败: %v", err)
 			return "", err
@@ -120,7 +117,7 @@ func HandleSendGuildChannelMsg(client callapi.Client, s *discordgo.Session, mess
 }
 
 // GenerateReplyMessage 创建一个discordgo兼容的消息，支持多个图片
-func GenerateReplyMessage(messageID string, foundItems map[string][]string, messageText string) (*discordgo.MessageSend, error) {
+func GenerateReplyMessage(foundItems map[string][]string, messageText string) (*discordgo.MessageSend, error) {
 	msg := &discordgo.MessageSend{
 		Content: messageText,
 	}

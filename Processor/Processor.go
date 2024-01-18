@@ -578,7 +578,7 @@ func SendMessage(messageText string, data interface{}, messageType string, s *di
 		// 创建foundItems
 		foundItems := make(map[string][]string)
 
-		combinedMsg, err := handlers.GenerateReplyMessage(msg.ID, foundItems, messageText)
+		combinedMsg, err := handlers.GenerateReplyMessage(foundItems, messageText)
 		if err != nil {
 			mylog.Printf("生成消息失败: %v", err)
 			return err
@@ -597,7 +597,7 @@ func SendMessage(messageText string, data interface{}, messageType string, s *di
 		// 创建foundItems映射并添加文本消息
 		foundItems := make(map[string][]string)
 
-		combinedMsg, err := handlers.GenerateReplyMessage(msg.ID, foundItems, messageText)
+		combinedMsg, err := handlers.GenerateReplyMessage(foundItems, messageText)
 		if err != nil {
 			mylog.Printf("生成消息失败: %v", err)
 			return err

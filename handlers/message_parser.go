@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -193,9 +192,9 @@ func parseMessageContent(paramsMessage callapi.ParamsContent) (string, map[strin
 	return messageText, foundItems
 }
 
-func isIPAddress(address string) bool {
-	return net.ParseIP(address) != nil
-}
+// func isIPAddress(address string) bool {
+// 	return net.ParseIP(address) != nil
+// }
 
 // at处理
 func transformMessageTextAt(messageText string) string {
@@ -578,7 +577,7 @@ func SendMessage(messageText string, data interface{}, messageType string, s *di
 		// 创建foundItems
 		foundItems := make(map[string][]string)
 
-		combinedMsg, err := GenerateReplyMessage(msg.ID, foundItems, messageText)
+		combinedMsg, err := GenerateReplyMessage(foundItems, messageText)
 		if err != nil {
 			mylog.Printf("生成消息失败: %v", err)
 			return err
@@ -597,7 +596,7 @@ func SendMessage(messageText string, data interface{}, messageType string, s *di
 		// 创建foundItems映射并添加文本消息
 		foundItems := make(map[string][]string)
 
-		combinedMsg, err := GenerateReplyMessage(msg.ID, foundItems, messageText)
+		combinedMsg, err := GenerateReplyMessage(foundItems, messageText)
 		if err != nil {
 			mylog.Printf("生成消息失败: %v", err)
 			return err
