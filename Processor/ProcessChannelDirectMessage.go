@@ -291,6 +291,8 @@ func (p *Processors) ProcessChannelDirectMessage(data *discordgo.MessageCreate, 
 					return nil
 				}
 			}
+			//用于还原
+			idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "user_id", fmt.Sprint(userid64))
 			//转成int再互转 适用于群场景私聊
 			idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "guild_id", data.GuildID)
 			//直接储存 适用于私信场景私聊
@@ -308,7 +310,6 @@ func (p *Processors) ProcessChannelDirectMessage(data *discordgo.MessageCreate, 
 			//构造echo
 			echostr := AppIDString + "_" + strconv.FormatInt(s, 10)
 
-			//userid := int(userid64)
 			//映射str的messageID到int
 			messageID64, err := idmap.StoreIDv2(data.ID)
 			if err != nil {
@@ -384,8 +385,7 @@ func (p *Processors) ProcessChannelDirectMessage(data *discordgo.MessageCreate, 
 			echo.AddMsgID(AppIDString, userid64, data.ID)
 			//为频道私聊转群聊映射
 			echo.AddMsgID(AppIDString, ChannelID64, data.ID)
-			//将当前的userid和groupid和msgid进行一个更稳妥的映射
-			echo.AddMsgIDv2(AppIDString, ChannelID64, userid64, data.ID)
+
 			//映射类型
 			echo.AddMsgType(AppIDString, userid64, "guild_private")
 			//储存当前群或频道号的类型

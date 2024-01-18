@@ -33,12 +33,12 @@ func HandleSendMsg(client callapi.Client, s *discordgo.Session, message callapi.
 	if msgType == "" {
 		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
 	}
+	if msgType == "" {
+		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
+	}
 	//新增 内存获取不到从数据库获取
 	if msgType == "" {
 		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
-	}
-	if msgType == "" {
-		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
 	}
 	var idInt64 int64
 	var err error
