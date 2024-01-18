@@ -22,22 +22,19 @@ func HandleSendGroupMsg(client callapi.Client, s *discordgo.Session, message cal
 		// 当 message.Echo 是字符串类型时执行此块
 		msgType = echo.GetMsgTypeByKey(echoStr)
 	}
-	//如果获取不到 就用user_id获取信息类型
-	if msgType == "" {
-		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
-	}
-
-	//如果获取不到 就用group_id获取信息类型
 	if msgType == "" {
 		msgType = GetMessageTypeByGroupid(config.GetAppIDStr(), message.Params.GroupID)
 	}
-	//新增 内存获取不到从数据库获取
 	if msgType == "" {
-		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
+		msgType = GetMessageTypeByUserid(config.GetAppIDStr(), message.Params.UserID)
 	}
 	if msgType == "" {
 		msgType = GetMessageTypeByGroupidV2(message.Params.GroupID)
 	}
+	if msgType == "" {
+		msgType = GetMessageTypeByUseridV2(message.Params.UserID)
+	}
+
 	mylog.Printf("send_group_msg获取到信息类型:%v", msgType)
 	var idInt64 int64
 	var err error
