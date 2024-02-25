@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -14,6 +15,7 @@ import (
 func CombinedMiddleware(s *discordgo.Session) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 检查路径和处理对应的请求
+		fmt.Printf("s2:%v", s)
 		if c.Request.URL.Path == "/send_group_msg" {
 			handleSendGroupMessage(c, s)
 			return
