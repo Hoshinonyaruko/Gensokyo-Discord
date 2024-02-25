@@ -87,7 +87,7 @@ func HandleSendGuildChannelMsg(client callapi.Client, s *discordgo.Session, mess
 			mylog.Printf("生成消息失败: %v", err)
 			return "", err
 		}
-
+		mylog.Printf("频道发信息channelID:%v  replyMsg:%v", channelID, replyMsg)
 		_, err = s.ChannelMessageSendComplex(channelID, replyMsg)
 		if err != nil {
 			mylog.Printf("发送消息失败: %v", err)

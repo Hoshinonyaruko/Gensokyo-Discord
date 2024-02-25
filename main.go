@@ -35,6 +35,7 @@ type Event interface{}
 
 // 消息处理器
 var p *Processor.Processors
+var globalBotId string
 
 func main() {
 	// 定义faststart命令行标志。默认为false。
@@ -100,7 +101,7 @@ func main() {
 		mylog.Println("并且到discord developer网站,获取机器人的token并填入config")
 	} else {
 		// 创建一个新的 Discord 会话
-		dg, err := discordgo.New("Bot " + conf.Settings.Token)
+		dg, err = discordgo.New("Bot " + conf.Settings.Token)
 		if err != nil {
 			mylog.Printf("创建 Discord 会话时出错: %v\n", err)
 			return // 或其他错误处理
@@ -140,6 +141,7 @@ func main() {
 			if configURL == "" { //初始化handlers
 				handlers.BotID = dg.State.User.ID
 				mylog.Printf("本机器人id:%v\n", handlers.BotID)
+				globalBotId = dg.State.User.ID
 			} else { //初始化handlers
 				handlers.BotID = config.GetDevBotid()
 			}
@@ -478,7 +480,9 @@ func guildMessagesHandler(s *discordgo.Session, i interface{}) {
 		// mylog.Println("Event type mismatch: expected *discordgo.MessageCreate")
 		return
 	}
-
+	if event.Author.ID == globalBotId {
+		return
+	}
 	// 如果 GuildID 为空，则认为是私信
 	if event.GuildID == "" {
 		// 处理私信
