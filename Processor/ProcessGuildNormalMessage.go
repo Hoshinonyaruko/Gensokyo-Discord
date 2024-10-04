@@ -114,6 +114,7 @@ func (p *Processors) ProcessGuildNormalMessage(data *discordgo.MessageCreate, se
 		//上报信息到onebotv11应用端(正反ws)
 		p.BroadcastMessageToAll(msgMap)
 	} else {
+
 		// GlobalChannelToGroup为true时的处理逻辑
 		//将频道转化为一个群
 		//获取s
@@ -176,74 +177,148 @@ func (p *Processors) ProcessGuildNormalMessage(data *discordgo.MessageCreate, se
 		}
 		IsBindedUserId := idmap.CheckValue(data.Author.ID, userid64)
 		IsBindedGroupId := idmap.CheckValue(data.ChannelID, ChannelID64)
-		groupMsg := OnebotGroupMessage{
-			RawMessage:  messageText,
-			Message:     segmentedMessages,
-			MessageID:   messageID,
-			GroupID:     ChannelID64,
-			MessageType: "group",
-			PostType:    "message",
-			SelfID:      int64(p.Settings.AppID),
-			UserID:      userid64,
-			Sender: Sender{
-				Nickname: data.Member.Nick,
-				UserID:   userid64,
-				Card:     data.Member.Nick,
-				Sex:      "0",
-				Age:      0,
-				Area:     "",
-				Level:    "0",
-			},
-			SubType:         "normal",
-			Time:            time.Now().Unix(),
-			Avatar:          data.Author.Avatar,
-			RealMessageType: "guild",
-			IsBindedUserId:  IsBindedUserId,
-			IsBindedGroupId: IsBindedGroupId,
-		}
-		// 根据条件判断是否添加Echo字段
-		if config.GetTwoWayEcho() {
-			groupMsg.Echo = echostr
-		}
-		// 获取MasterID数组
-		masterIDs := config.GetMasterID()
 
-		// 判断userid64是否在masterIDs数组里
-		isMaster := false
-		for _, id := range masterIDs {
-			if strconv.FormatInt(userid64, 10) == id {
-				isMaster = true
-				break
+		// 是否使用string形式上报
+		if !config.GetStringOb11() {
+			groupMsg := OnebotGroupMessage{
+				RawMessage:  messageText,
+				Message:     segmentedMessages,
+				MessageID:   messageID,
+				GroupID:     ChannelID64,
+				MessageType: "group",
+				PostType:    "message",
+				SelfID:      int64(p.Settings.AppID),
+				UserID:      userid64,
+				Sender: Sender{
+					Nickname: data.Member.Nick,
+					UserID:   userid64,
+					Card:     data.Member.Nick,
+					Sex:      "0",
+					Age:      0,
+					Area:     "",
+					Level:    "0",
+				},
+				SubType:         "normal",
+				Time:            time.Now().Unix(),
+				Avatar:          data.Author.Avatar,
+				RealMessageType: "guild",
+				IsBindedUserId:  IsBindedUserId,
+				IsBindedGroupId: IsBindedGroupId,
 			}
-		}
+			// 根据条件判断是否添加Echo字段
+			if config.GetTwoWayEcho() {
+				groupMsg.Echo = echostr
+			}
+			// 获取MasterID数组
+			masterIDs := config.GetMasterID()
 
-		// 根据isMaster的值为groupMsg的Sender赋值role字段
-		if isMaster {
-			groupMsg.Sender.Role = "owner"
+			// 判断userid64是否在masterIDs数组里
+			isMaster := false
+			for _, id := range masterIDs {
+				if strconv.FormatInt(userid64, 10) == id {
+					isMaster = true
+					break
+				}
+			}
+
+			// 根据isMaster的值为groupMsg的Sender赋值role字段
+			if isMaster {
+				groupMsg.Sender.Role = "owner"
+			} else {
+				groupMsg.Sender.Role = "member"
+			}
+			//将当前s和appid和message进行映射
+			echo.AddMsgID(AppIDString, s, data.ID)
+			echo.AddMsgType(AppIDString, s, "guild")
+			//为不支持双向echo的ob服务端映射
+			echo.AddMsgID(AppIDString, ChannelID64, data.ID)
+			//将当前的userid和groupid和msgid进行一个更稳妥的映射
+			echo.AddMsgIDv2(AppIDString, ChannelID64, userid64, data.ID)
+			//储存当前群或频道号的类型
+			idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "type", "guild")
+			echo.AddMsgType(AppIDString, ChannelID64, "guild")
+			//懒message_id池
+			echo.AddLazyMessageId(strconv.FormatInt(ChannelID64, 10), data.ID, time.Now())
+
+			//调试
+			PrintStructWithFieldNames(groupMsg)
+
+			// Convert OnebotGroupMessage to map and send
+			groupMsgMap := structToMap(groupMsg)
+
+			//上报信息到onebotv11应用端(正反ws)
+			p.BroadcastMessageToAll(groupMsgMap)
 		} else {
-			groupMsg.Sender.Role = "member"
+			groupMsg := OnebotGroupMessageS{
+				RawMessage:  messageText,
+				Message:     segmentedMessages,
+				MessageID:   data.ID,
+				GroupID:     data.ChannelID,
+				MessageType: "group",
+				PostType:    "message",
+				SelfID:      int64(p.Settings.AppID),
+				UserID:      data.Author.ID,
+				Sender: Sender{
+					Nickname: data.Member.Nick,
+					UserID:   userid64,
+					Card:     data.Member.Nick,
+					Sex:      "0",
+					Age:      0,
+					Area:     "",
+					Level:    "0",
+				},
+				SubType:         "normal",
+				Time:            time.Now().Unix(),
+				Avatar:          data.Author.Avatar,
+				RealMessageType: "guild",
+				RealGroupID:     data.ChannelID,
+				RealUserID:      data.Author.ID,
+				IsBindedUserId:  IsBindedUserId,
+				IsBindedGroupId: IsBindedGroupId,
+			}
+			// 根据条件判断是否添加Echo字段
+			if config.GetTwoWayEcho() {
+				groupMsg.Echo = echostr
+			}
+			// 获取MasterID数组
+			masterIDs := config.GetMasterID()
+
+			// 判断userid64是否在masterIDs数组里
+			isMaster := false
+			for _, id := range masterIDs {
+				if strconv.FormatInt(userid64, 10) == id {
+					isMaster = true
+					break
+				}
+			}
+
+			// 根据isMaster的值为groupMsg的Sender赋值role字段
+			if isMaster {
+				groupMsg.Sender.Role = "owner"
+			} else {
+				groupMsg.Sender.Role = "member"
+			}
+			//将当前s和appid和message进行映射
+			echo.AddMsgID(AppIDString, s, data.ID)
+			echo.AddMsgType(AppIDString, s, "guild")
+			//为不支持双向echo的ob服务端映射
+			echo.AddMsgID(AppIDString, ChannelID64, data.ID)
+
+			//储存当前群或频道号的类型
+			idmap.WriteConfigv2(data.ChannelID, "type", "guild")
+			//懒message_id池
+			echo.AddLazyMessageId(data.ChannelID, data.ID, time.Now())
+
+			//调试
+			PrintStructWithFieldNames(groupMsg)
+
+			// Convert OnebotGroupMessage to map and send
+			groupMsgMap := structToMap(groupMsg)
+
+			//上报信息到onebotv11应用端(正反ws)
+			p.BroadcastMessageToAll(groupMsgMap)
+
 		}
-		//将当前s和appid和message进行映射
-		echo.AddMsgID(AppIDString, s, data.ID)
-		echo.AddMsgType(AppIDString, s, "guild")
-		//为不支持双向echo的ob服务端映射
-		echo.AddMsgID(AppIDString, ChannelID64, data.ID)
-		//将当前的userid和groupid和msgid进行一个更稳妥的映射
-		echo.AddMsgIDv2(AppIDString, ChannelID64, userid64, data.ID)
-		//储存当前群或频道号的类型
-		idmap.WriteConfigv2(fmt.Sprint(ChannelID64), "type", "guild")
-		echo.AddMsgType(AppIDString, ChannelID64, "guild")
-		//懒message_id池
-		echo.AddLazyMessageId(strconv.FormatInt(ChannelID64, 10), data.ID, time.Now())
-
-		//调试
-		PrintStructWithFieldNames(groupMsg)
-
-		// Convert OnebotGroupMessage to map and send
-		groupMsgMap := structToMap(groupMsg)
-
-		//上报信息到onebotv11应用端(正反ws)
-		p.BroadcastMessageToAll(groupMsgMap)
 	}
 
 	return nil

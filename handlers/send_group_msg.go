@@ -69,10 +69,15 @@ func HandleSendGroupMsg(client callapi.Client, s *discordgo.Session, message cal
 			RChannelID, _, err = idmap.RetrieveRowByIDv2Pro(message.Params.ChannelID, message.Params.UserID.(string))
 			mylog.Printf("测试,通过Proid获取的RChannelID:%v", RChannelID)
 		}
-		if RChannelID == "" {
-			// 使用RetrieveRowByIDv2还原真实的ChannelID
-			RChannelID, err = idmap.RetrieveRowByIDv2(message.Params.ChannelID)
+		if config.GetStringOb11() {
+			RChannelID = message.Params.ChannelID
+		} else {
+			if RChannelID == "" {
+				// 使用RetrieveRowByIDv2还原真实的ChannelID
+				RChannelID, err = idmap.RetrieveRowByIDv2(message.Params.ChannelID)
+			}
 		}
+
 		if err != nil {
 			mylog.Printf("error retrieving real RChannelID: %v", err)
 		}
