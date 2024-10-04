@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hoshinonyaruko/gensokyo-discord/Processor"
 	"github.com/hoshinonyaruko/gensokyo-discord/config"
+	"github.com/hoshinonyaruko/gensokyo-discord/echo"
 	"github.com/hoshinonyaruko/gensokyo-discord/handlers"
 	"github.com/hoshinonyaruko/gensokyo-discord/httpapi"
 	"github.com/hoshinonyaruko/gensokyo-discord/idmap"
@@ -466,9 +468,12 @@ func registerHandlersFromConfig(dg *discordgo.Session, intents []string) {
 	for _, intentName := range intents {
 		handler := mapIntentToHandler(intentName)
 		if handler == nil {
-			//mylog.Printf("Handler not found for intent: %s\n", intentName)
+			mylog.Printf("Handler not found for intent: %s\n", intentName)
 			continue
 		}
+
+		mylog.Printf("Handler found for intent: %s\n", intentName)
+
 		// 注册 Handler
 		dg.AddHandler(handler)
 	}
@@ -516,6 +521,75 @@ func guildMessageTypingHandler(s *discordgo.Session, i interface{}) {
 	// 处理 TypingStart 事件
 	mylog.Printf("User is typing in channel: %s", event.ChannelID)
 }
+
+func interactionCreateHandler(s *discordgo.Session, i interface{}) {
+	event, ok := i.(*discordgo.InteractionCreate)
+	if !ok {
+		//mylog.Println("Event type mismatch: expected *discordgo.TypingStart")
+		return
+	}
+
+	groupMsg := Processor.OnebotGroupMessageS{
+		RawMessage:  event.MessageComponentData().CustomID,
+		Message:     event.MessageComponentData().CustomID,
+		MessageID:   event.ID,
+		GroupID:     event.ChannelID,
+		MessageType: "group",
+		PostType:    "message",
+		SelfID:      int64(p.Settings.AppID),
+		UserID:      event.Member.User.ID,
+		Sender: Processor.Sender{
+			Nickname: event.Member.User.Username,
+			UserID:   0,
+			Card:     event.Member.User.Username,
+			Sex:      "0",
+			Age:      0,
+			Area:     "",
+			Level:    "0",
+		},
+		SubType:         "normal",
+		Time:            time.Now().Unix(),
+		Avatar:          event.Member.User.Avatar,
+		RealMessageType: "guild",
+		RealGroupID:     event.ChannelID,
+		RealUserID:      event.Member.User.ID,
+	}
+
+	//储存当前群或频道号的类型
+	idmap.WriteConfigv2(event.ChannelID, "type", "guild")
+	//懒message_id池
+	echo.AddLazyMessageId(event.ChannelID, event.ID, time.Now())
+
+	//调试
+	Processor.PrintStructWithFieldNames(groupMsg)
+
+	// Convert OnebotGroupMessage to map and send
+	groupMsgMap := structToMap(groupMsg)
+
+	//上报信息到onebotv11应用端(正反ws)
+	p.BroadcastMessageToAll(groupMsgMap)
+
+	// 处理 TypingStart 事件
+	mylog.Printf("interactionCreateHandler in channel: %s", event.ChannelID)
+
+	// 向 Discord 发送确认响应，不发送任何消息
+	err := s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+	if err != nil {
+		mylog.Printf("响应交互失败: %v", err)
+		return
+	}
+}
+
+// 将结构体转换为 map[string]interface{}
+func structToMap(obj interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	j, _ := json.Marshal(obj)
+	json.Unmarshal(j, &out)
+	return out
+}
+
 func directMessagesHandler(s *discordgo.Session, i interface{}) {
 	event, ok := i.(*discordgo.MessageCreate)
 	if !ok {
@@ -617,6 +691,8 @@ func mapIntentToHandler(intentName string) func(*discordgo.Session, interface{})
 		return messageContentHandler
 	case "GuildScheduledEvents":
 		return guildScheduledEventsHandler
+	case "interactionCreate":
+		return interactionCreateHandler
 	default:
 		mylog.Printf("Unknown intent: %s\n", intentName)
 		return nil
