@@ -3,10 +3,13 @@ package handlers
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/hoshinonyaruko/gensokyo-discord/callapi"
@@ -205,6 +208,31 @@ func GenerateReplyMessage(foundItems map[string][]string, messageText string) (*
 			})
 		}
 	}
+	// 处理Base64编码的markdown
+	if markdowns, ok := foundItems["markdown"]; ok {
+		for _, markdown := range markdowns {
+			// Base64解码
+			data, err := base64.StdEncoding.DecodeString(markdown)
+			if err != nil {
+				log.Printf("Base64解码失败：%v", err)
+				continue
+			}
+
+			// 打印解码后的数据（用于调试）
+			fmt.Print(string(data))
+
+			// 调用 ConvertToDiscordMessage 生成消息对象
+			discordMsg, err := ConvertToDiscordMessage(data)
+			if err != nil {
+				log.Printf("转换为 Discord 消息失败: %v", err)
+				continue
+			}
+
+			// 合并返回的消息到当前消息中
+			msg.Content += "\n" + discordMsg.Content
+			msg.Components = append(msg.Components, discordMsg.Components...)
+		}
+	}
 
 	return msg, nil
 }
@@ -223,4 +251,115 @@ func downloadImage(url string) ([]byte, error) {
 	}
 
 	return []byte(data), nil
+}
+
+// 定义 JSON 结构的解析对象
+type Button struct {
+	Action     ActionData `json:"action"`
+	RenderData RenderData `json:"render_data"`
+}
+
+type ActionData struct {
+	Data       string     `json:"data"`
+	Enter      bool       `json:"enter"`
+	Permission Permission `json:"permission"`
+}
+
+type RenderData struct {
+	Label        string `json:"label"`
+	Style        int    `json:"style"`
+	VisitedLabel string `json:"visited_label"`
+}
+
+type Permission struct {
+	Type int `json:"type"`
+}
+
+type Row struct {
+	Buttons []Button `json:"buttons"`
+}
+
+type KeyboardContent struct {
+	Rows []Row `json:"rows"`
+}
+
+type Keyboard struct {
+	Content KeyboardContent `json:"content"`
+}
+
+type Markdown struct {
+	Content string `json:"content"`
+}
+
+type MessageData struct {
+	Keyboard Keyboard `json:"keyboard"`
+	Markdown Markdown `json:"markdown"`
+}
+
+// 将输入的字节类型 JSON 转换为 Discord 可发送的消息结构
+func ConvertToDiscordMessage(jsonData []byte) (*discordgo.MessageSend, error) {
+	// 解析 JSON 数据
+	var messageData MessageData
+	err := json.Unmarshal(jsonData, &messageData)
+	if err != nil {
+		return nil, fmt.Errorf("JSON 解码失败: %v", err)
+	}
+
+	// 创建消息对象
+	msg := &discordgo.MessageSend{}
+
+	// 处理 markdown 内容
+	if markdownContent := messageData.Markdown.Content; markdownContent != "" {
+		msg.Content = ConvertQQBotToMarkdown(markdownContent) // 转换并设置为消息内容
+	}
+
+	// 创建按钮组件
+	var components []discordgo.MessageComponent
+	for _, row := range messageData.Keyboard.Content.Rows {
+		var actionRow discordgo.ActionsRow
+		for _, button := range row.Buttons {
+			var btn discordgo.Button
+			if button.Action.Data == "https://gskllm.com" {
+				// 如果是外部链接，使用 LinkButton 类型
+				btn = discordgo.Button{
+					Label: button.RenderData.Label,
+					Style: discordgo.LinkButton,                // 设置为 LinkButton 类型
+					URL:   button.Action.Data,                  // URL 放在这里
+					Emoji: discordgo.ComponentEmoji{Name: "🌙"}, // 添加月亮 emoji
+				}
+			} else {
+				// 普通按钮，触发逻辑操作
+				btn = discordgo.Button{
+					Label:    button.RenderData.Label,
+					Style:    discordgo.PrimaryButton,
+					CustomID: button.Action.Data,                  // 使用 CustomID 处理逻辑
+					Emoji:    discordgo.ComponentEmoji{Name: "🌙"}, // 添加月亮 emoji
+				}
+			}
+
+			// 输出调试信息
+			fmt.Printf("按钮 Label: %s, CustomID/URL: %s, Style: %d\n", btn.Label, btn.CustomID, btn.Style)
+
+			actionRow.Components = append(actionRow.Components, btn)
+		}
+		components = append(components, actionRow)
+	}
+
+	// 将按钮组件添加到消息中
+	msg.Components = components
+
+	return msg, nil
+}
+
+// 转换 qqbot 标签为 Discord 支持的 Markdown 格式
+func ConvertQQBotToMarkdown(input string) string {
+	// 替换 <qqbot-cmd-input> 标签为 Markdown 加粗，只提取 text 部分
+	reCmdInput := regexp.MustCompile(`<qqbot-cmd-input text='([^']+)' show='[^']+' reference='[^']+' />`)
+	output := reCmdInput.ReplaceAllString(input, "**$1**") // 加粗文本
+
+	// 替换 <qqbot-at-user> 标签为 Discord 提及格式
+	reAtUser := regexp.MustCompile(`<qqbot-at-user id="(\d+)" />`)
+	output = reAtUser.ReplaceAllString(output, "<@$1>") // 转换为 Discord 提及格式
+
+	return output
 }
